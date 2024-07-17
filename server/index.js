@@ -1,36 +1,33 @@
 const express = require('express');
-const cors = require('cors');
-const { initializeApp, applicationDefault, cert } = require('firebase-admin/app');
-const { getDatabase } = require('firebase-admin/database');
-require('dotenv').config();
+const http = require('http');
+const socketIo = require('socket.io');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const server = http.createServer(app);
+const io = socketIo(server);
 
-initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    }),
-    databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`,
+io.on('connection', (socket) => {
+  console.log('New client connected: ' + socket.id);
+
+  socket.on('sendMessage', (message) => {
+    console.log(`Message from ${socket.id}: ${message}`);
+    io.emit('receiveMessage', message); // Broadcast message to all connected clients
   });
-  
-const db = getDatabase();
 
-app.post('/messages', async (req, res) => {
-  const { chatId, message, userId } = req.body;
-  await db.ref(`chats/${chatId}/messages`).push({ userId, message, timestamp: Date.now() });
-  res.json({ message: 'Message sent' });
+  socket.on('disconnect', () => {
+    console.log('Client disconnected: ' + socket.id);
+  });
+
+  // Handle errors
+  socket.on('error', (err) => {
+    console.error(`Socket error: ${err.message}`);
+  });
 });
 
-app.get('/messages/:chatId', async (req, res) => {
-  const snapshot = await db.ref(`chats/${req.params.chatId}/messages`).get();
-  res.json(snapshot.val());
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
